@@ -1,0 +1,49 @@
+name: Publish Master Video to GitHub Fastly CDN Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Workflow Run ID with Rendered Artifacts'
+        required: true
+        default: '40887067986'
+      release_tag:
+        description: 'Release Tag Name'
+        required: true
+        default: 'v1.0.0-quiet-man'
+
+permissions:
+  contents: write
+
+jobs:
+  publish_release:
+    name: Publish Master Video Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Download Master Video Artifact
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Downloading master video from run ${{ github.event.inputs.run_id }}..."
+          gh run download ${{ github.event.inputs.run_id }} --name stoic_vampire_master_full_video --dir ./release_files
+          ls -lh ./release_files/
+
+      - name: Create GitHub Release with Fastly CDN Link
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.event.inputs.release_tag }}"
+          
+          # Delete existing release/tag if already exists
+          gh release delete "$TAG" -y 2>/dev/null || true
+          git tag -d "$TAG" 2>/dev/null || true
+          git push origin :refs/tags/"$TAG" 2>/dev/null || true
+
+          echo "Creating Release $TAG with 490 MB master video..."
+          gh release create "$TAG" ./release_files/*.mp4 \
+            --title "Stoic Vampire — The Man Who Goes Quiet (Full Master Episode)" \
+            --notes "Full 7:15 master video (490 MB) delivered via GitHub Fastly CDN for maximum high-speed line download."
