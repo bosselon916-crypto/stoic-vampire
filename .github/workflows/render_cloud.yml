@@ -2,8 +2,6 @@ name: Stoic Vampire Cloud Renderer (Parallel Matrix)
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main, master ]
 
 permissions:
   contents: write

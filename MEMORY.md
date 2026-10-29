@@ -1,71 +1,61 @@
 # Cloud & Local Video Rendering — Memory & Production Rules
 
-> **Quick Checklist**: Follow these rules on every new video project to guarantee 100% first-pass render success without errors.
+> **MANDATORY AGENT POLICY (STRICT MANUAL CONTROL)**:
+> 1. **NEVER auto-start renders on git push**: Workflows must ONLY use `workflow_dispatch:`. The agent's job is ONLY to prepare code/assets and push to GitHub. The USER manually clicks "Run workflow" when ready.
+> 2. **NEVER auto-publish CDN releases**: Release publishing is ALWAYS a manual `workflow_dispatch:`. The USER manually triggers the Fastly CDN release after the video render finishes.
+> 3. **Single Master File in Release**: In the Fastly CDN release, publish ONLY the final master video (~450–500 MB). Do not clutter the release with raw clips or split parts.
 
 ---
 
-### 1. Image Assets (Never Split Folders)
-- **The Mistake**: Scenes split between `render_kit` and `render_kit 2`.
-- **The Rule**: All scene images MUST be named sequentially (`scene_01.png`, `scene_02.png`, ... `scene_N.png`) and live together in a single folder: `build/img/`.
+### Core Production Rules & Checklist
 
----
+#### 1. Manual Execution Only (No Auto-Triggers)
+- Never add `push:` event triggers to `.github/workflows/`. Only use `workflow_dispatch:`.
+- The agent prepares the repository, checks paths, and pushes.
+- The user decides when to run the render workflow and when to run the release workflow.
 
-### 2. Python Scripts & Subprocesses
-- **The Mistake**: Calling `["python3", "script.py"]` inside Python scripts. In GitHub Actions and virtualenvs, `python3` points to system Python where `PIL`/`numpy` are missing.
-- **The Rule**: Always use `sys.executable`:
+#### 2. Fastly CDN for High-Speed Downloads
+- Standard GitHub Actions artifacts (Azure Blob storage) get throttled to ~1 KB/s by ISPs.
+- GitHub Releases are served via Fastly Global CDN (`github.com/.../releases/download/...`) at full line speed (25–35 MB/s).
+- Keep release assets clean: only attach the single finished master video (`.mp4`).
+
+#### 3. Image Assets (Never Split Folders)
+- Never split scene stills across multiple folders (e.g. `render_kit` vs `render_kit 2`).
+- All scene stills MUST live in a single folder: `build/img/scene_01.png` ... `scene_N.png`.
+
+#### 4. Python Subprocess Executable
+- Never call `subprocess.run(["python3", ...])`.
+- Always use `sys.executable`:
   ```python
   subprocess.run([sys.executable, "brush_render_v3.py", ...])
   ```
-- **Error Propagation**: Never let a batch script exit `0` if scenes failed. Always exit `1`:
+- In GitHub Actions and virtualenvs, `sys.executable` guarantees access to installed dependencies (`pillow`, `numpy`).
+
+#### 5. Fail-Fast Batch Scripts
+- Batch render scripts must exit with code 1 if any scene fails:
   ```python
   if failed:
       sys.exit(1)
   ```
+- Prevents silent failures from reporting false-positive green checkmarks.
 
----
+#### 6. Output Directory & FFmpeg Pipe Safety
+- Always call `os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)` before spawning FFmpeg stdin pipes.
+- Prevents `BrokenPipeError: [Errno 32] Broken pipe`.
+- Always verify `import os` is at the top of the script.
 
-### 3. Output Directory & FFmpeg Pipes
-- **The Mistake**: FFmpeg stdin pipe crashes with `BrokenPipeError: [Errno 32] Broken pipe` if the target output directory does not exist.
-- **The Rule**: Always ensure directory exists before starting FFmpeg:
-  ```python
-  out_dir = os.path.dirname(os.path.abspath(a.out))
-  if out_dir:
-      os.makedirs(out_dir, exist_ok=True)
-  ```
-- Always ensure `import os` is at the top of rendering scripts.
-
----
-
-### 4. Git Large Pushes (Prevent HTTP 400)
-- **The Mistake**: Pushing 100 MB+ of scene PNGs fails with `error: RPC failed; HTTP 400 curl 22`.
-- **The Rule**: Increase Git's buffer before pushing large asset folders:
+#### 7. Git Buffer for 100MB+ Scene Images
+- Before pushing large assets, increase Git's postBuffer:
   ```bash
   git config http.postBuffer 524288000
   git config http.maxRequestBuffer 524288000
   ```
+- Prevents `error: RPC failed; HTTP 400 curl 22`.
 
----
+#### 8. GitHub Actions Quality Gates
+- In artifact uploads: always set `if-no-files-found: error`.
+- In assembly: verify clip count strictly matches total scenes before running assembly.
 
-### 5. GitHub Actions Quality Gates
-- **Upload Artifact**: Never allow silent missing files. Set `if-no-files-found: error`:
-  ```yaml
-  uses: actions/upload-artifact@v4
-  with:
-      name: clips-chunk-${{ matrix.chunk }}
-      path: build/clips/*.mp4
-      if-no-files-found: error
-  ```
-- **Clip Count Gate**: Before running the final assembly job, verify the exact clip count matches the total scenes:
-  ```yaml
-  count=$(ls -1 build/clips/scene_*.mp4 2>/dev/null | wc -l)
-  if [ "$count" -lt 46 ]; then
-      echo "ERROR: Expected 46 clips, found $count"
-      exit 1
-  fi
-  ```
-
----
-
-### 6. GitHub Account for Cloud Rendering
-- **The Mistake**: Brand new, unverified GitHub accounts block GitHub Actions (`"Actions has been disabled for this user"`).
-- **The Rule**: Always use an existing, email-verified GitHub account or complete 2FA setup first. Public repositories have 100% free unlimited Actions minutes.
+#### 9. GitHub Account Requirements
+- Use an established/email-verified GitHub account.
+- Public repositories have 100% free unlimited Actions minutes.
