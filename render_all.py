@@ -35,7 +35,7 @@ for sc in plan:
     if not os.path.exists(still):
         failed.append((n, "missing still"))
         continue
-    r = subprocess.run(["python3", f"{WORK}/brush_render_v3.py",
+    r = subprocess.run([sys.executable, f"{WORK}/brush_render_v3.py",
                         "--still", still, "--out", out,
                         "--duration", str(sc["dur"]),
                         "--dust-pattern", sc["dust_pattern"],
@@ -52,3 +52,6 @@ for sc in plan:
         done += 1
         print(f"scene {n}: ok ({done})", flush=True)
 print(f"RENDER PASS COMPLETE done={done} failed={failed}")
+if failed:
+    sys.exit(1)
+

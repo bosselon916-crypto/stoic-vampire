@@ -54,6 +54,7 @@ jobs:
         with:
           name: clips-chunk-${{ matrix.chunk }}
           path: build/clips/*.mp4
+          if-no-files-found: error
           retention-days: 3
 
   assemble_full_video:
@@ -87,8 +88,14 @@ jobs:
 
       - name: Verify All 46 Scene Clips Exist
         run: |
-          echo "Checking rendered clips count:"
-          ls -1 build/clips/*.mp4 | wc -l
+          echo "Listing build/clips contents:"
+          ls -lh build/clips/ || true
+          count=$(ls -1 build/clips/*.mp4 2>/dev/null | wc -l)
+          echo "Total rendered clips found: $count"
+          if [ "$count" -lt 46 ]; then
+            echo "ERROR: Expected 46 clips, but only found $count"
+            exit 1
+          fi
 
       - name: Run Delivery Assembly (Loudnorm & Group Parts)
         run: |

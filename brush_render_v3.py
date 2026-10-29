@@ -277,7 +277,8 @@ def main():
          "-s", f"{W}x{H}", "-r", str(FPS), "-i", "-", "-an", "-c:v", "libx264",
          "-pix_fmt", "yuv420p", "-preset", "medium", "-crf", "20",
          "-movflags", "+faststart", a.out],
-        stdin=subprocess.PIPE)
+        stdin=subprocess.PIPE,
+        stderr=subprocess.PIPE)
 
     dust_done = False
     clean_done = False
@@ -326,9 +327,16 @@ def main():
             gy, gx = np.mgrid[ya:yb, xa:xb]
             g = np.exp(-((gx - p[0]) ** 2 + (gy - p[1]) ** 2) / (2 * (r * 1.6) ** 2)) * al * 190
             frame[ya:yb, xa:xb] += g[..., None]
-        particles = alive
-        proc.stdin.write(np.clip(frame, 0, 255).astype(np.uint8).tobytes())
-    proc.stdin.close(); proc.wait()
+        try:
+            proc.stdin.write(np.clip(frame, 0, 255).astype(np.uint8).tobytes())
+        except BrokenPipeError:
+            err = proc.stderr.read().decode('utf-8', errors='ignore') if proc.stderr else "unknown error"
+            raise RuntimeError(f"FFmpeg stdin broken pipe. FFmpeg stderr: {err}")
+    proc.stdin.close()
+    proc.wait()
+    if proc.returncode != 0:
+        err = proc.stderr.read().decode('utf-8', errors='ignore') if proc.stderr else "unknown error"
+        raise RuntimeError(f"FFmpeg failed (exit {proc.returncode}): {err}")
     print(f"DONE {a.out} frames={frames} dur={frames / FPS:.3f}s "
           f"dust={a.dust_pattern}/seed{a.dust_seed}/R{R_dust} "
           f"clean={a.clean_pattern}/seed{a.clean_seed}/R{R_clean}")
