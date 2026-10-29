@@ -16,7 +16,7 @@ or 30% of duration when duration < 10s); clean sweep runs dust-end ->
 clean-end (auto: 92% of duration); clean hold to the end.
 Output: 1280x720, 30fps, silent, H.264 yuv420p, crf 20.
 """
-import argparse, math, subprocess, sys
+import argparse, math, os, subprocess, sys
 import numpy as np
 from PIL import Image, ImageFilter
 
