@@ -1,0 +1,20 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Audio generated caches (regenerated automatically from voiceover.mp3)
+audio/*.wav
+build/vo_loud_full.wav
+
+# Local render outputs & caches
+build/clips/
+delivery720/
+
+# Scratch & logs
+*.log
+scratch/

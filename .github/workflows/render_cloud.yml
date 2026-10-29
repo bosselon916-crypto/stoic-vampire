@@ -1,0 +1,116 @@
+name: Stoic Vampire Cloud Renderer (Parallel Matrix)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+permissions:
+  contents: write
+
+jobs:
+  render_matrix:
+    name: Render Scenes ${{ matrix.start }}-${{ matrix.end }} (Runner ${{ matrix.chunk }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { chunk: 1, start: 1, end: 5 }
+          - { chunk: 2, start: 6, end: 10 }
+          - { chunk: 3, start: 11, end: 15 }
+          - { chunk: 4, start: 16, end: 20 }
+          - { chunk: 5, start: 21, end: 25 }
+          - { chunk: 6, start: 26, end: 30 }
+          - { chunk: 7, start: 31, end: 35 }
+          - { chunk: 8, start: 36, end: 40 }
+          - { chunk: 9, start: 41, end: 45 }
+          - { chunk: 10, start: 46, end: 46 }
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Setup FFmpeg (Static Binary)
+        uses: federicocarboni/setup-ffmpeg@v3
+
+      - name: Install Python Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Render Scenes ${{ matrix.start }} to ${{ matrix.end }}
+        run: |
+          python3 render_all.py ${{ matrix.start }} ${{ matrix.end }}
+
+      - name: Upload Scene Clips Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: clips-chunk-${{ matrix.chunk }}
+          path: build/clips/*.mp4
+          retention-days: 3
+
+  assemble_full_video:
+    name: Assemble & Mux Full Delivery Video
+    needs: render_matrix
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Setup FFmpeg (Static Binary)
+        uses: federicocarboni/setup-ffmpeg@v3
+
+      - name: Install Python Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Download All Rendered Clips
+        uses: actions/download-artifact@v4
+        with:
+          pattern: clips-chunk-*
+          merge-multiple: true
+          path: build/clips/
+
+      - name: Verify All 46 Scene Clips Exist
+        run: |
+          echo "Checking rendered clips count:"
+          ls -1 build/clips/*.mp4 | wc -l
+
+      - name: Run Delivery Assembly (Loudnorm & Group Parts)
+        run: |
+          python3 make_delivery.py
+
+      - name: Stitch Delivery Parts into One Full Master Video
+        run: |
+          cd delivery720
+          printf "file '%s'\n" quietman_brush720_part*_v1.mp4 > list.txt
+          ffmpeg -f concat -safe 0 -i list.txt -c copy stoic_vampire_quiet_man_full_720p.mp4
+          ls -lh stoic_vampire_quiet_man_full_720p.mp4
+
+      - name: Upload Final Master Full Video
+        uses: actions/upload-artifact@v4
+        with:
+          name: stoic_vampire_master_full_video
+          path: delivery720/stoic_vampire_quiet_man_full_720p.mp4
+          retention-days: 14
+
+      - name: Upload All Delivery Parts & Manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: stoic_vampire_delivery_package
+          path: delivery720/
+          retention-days: 14
